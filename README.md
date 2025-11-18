@@ -153,22 +153,10 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ## 🙏 Acknowledgments
 
 - Dr. Mahmoud Zaki for the comprehensive lecture materials
 - OpenCV community for the excellent computer vision library
 - John Canny for developing the edge detection algorithm (1986)
-
-## 📧 Contact
-
-Your Name - [@yourhandle](https://twitter.com/yourhandle)
-
-Project Link: [https://github.com/yourusername/canny-edge-detection-camera](https://github.com/yourusername/canny-edge-detection-camera)
-
----
 
 ⭐ If you found this project helpful, please give it a star!
