@@ -1,114 +1,115 @@
-import numpy as np
 import cv2
+import numpy as np
+from skimage.color import rgb2gray
 
-# ========== COMPLETE CANNY EDGE DETECTION ==========
-def canny_edge_detection(image, low_threshold=50, high_threshold=150):
-    # STEP 1: Noise Reduction - Gaussian Blur
-    blurred = cv2.GaussianBlur(image, (5, 5), 0)
+#SOBEL 
+def sobel(frame):
+    gray = rgb2gray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+    sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
     
-    # STEP 2: Gradient Calculation - Sobel Operators
-    grad_x = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=3)
-    grad_y = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=3)
-    grad_magnitude = np.sqrt(grad_x**2 + grad_y**2)
-    grad_direction = np.arctan2(grad_y, grad_x)
+    gradient_magnitude = np.sqrt(sobelx**2 + sobely**2)
+    gradient_magnitude *= 255.0 / gradient_magnitude.max()
     
-    # STEP 3: Non-Maximum Suppression
-    M, N = grad_magnitude.shape
-    suppressed = np.zeros((M, N), dtype=np.float32)
-    angle = grad_direction * 180. / np.pi
-    angle[angle < 0] += 180
-    
-    for i in range(1, M - 1):
-        for j in range(1, N - 1):
-            q, r = 255, 255
-            
-            if (0 <= angle[i, j] < 22.5) or (157.5 <= angle[i, j] <= 180):
-                q, r = grad_magnitude[i, j + 1], grad_magnitude[i, j - 1]
-            elif (22.5 <= angle[i, j] < 67.5):
-                q, r = grad_magnitude[i + 1, j - 1], grad_magnitude[i - 1, j + 1]
-            elif (67.5 <= angle[i, j] < 112.5):
-                q, r = grad_magnitude[i + 1, j], grad_magnitude[i - 1, j]
-            elif (112.5 <= angle[i, j] < 157.5):
-                q, r = grad_magnitude[i - 1, j - 1], grad_magnitude[i + 1, j + 1]
-            
-            if grad_magnitude[i, j] >= q and grad_magnitude[i, j] >= r:
-                suppressed[i, j] = grad_magnitude[i, j]
-    
-    # STEP 4: Double Threshold
-    strong = 255
-    weak = 75
-    strong_edges = np.zeros_like(suppressed, dtype=np.uint8)
-    weak_edges = np.zeros_like(suppressed, dtype=np.uint8)
-    
-    strong_edges[suppressed >= high_threshold] = strong
-    weak_edges[(suppressed >= low_threshold) & (suppressed < high_threshold)] = weak
-    
-    # STEP 5: Edge Tracking by Hysteresis
-    result = np.copy(strong_edges)
-    
-    for i in range(1, M - 1):
-        for j in range(1, N - 1):
-            if weak_edges[i, j] == weak:
-                if ((result[i+1, j-1] == strong) or (result[i+1, j] == strong) or 
-                    (result[i+1, j+1] == strong) or (result[i, j-1] == strong) or 
-                    (result[i, j+1] == strong) or (result[i-1, j-1] == strong) or 
-                    (result[i-1, j] == strong) or (result[i-1, j+1] == strong)):
+    return gradient_magnitude.astype(np.uint8)
+# CANNY
+def Canny_edge_detection(frame, low_threshold=30, high_threshold=60):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (3, 3), 0)
+
+    gx = cv2.Sobel(blur, cv2.CV_64F, 1, 0, ksize=3)
+    gy = cv2.Sobel(blur, cv2.CV_64F, 0, 1, ksize=3)
+
+    mag = np.hypot(gx, gy)
+    mag = (mag / mag.max()) * 255
+    ang = np.degrees(np.arctan2(gy, gx))
+    ang[ang < 0] += 180
+
+    M, N = mag.shape
+    Z = np.zeros((M, N), dtype=np.float32)
+
+    # Non-Max Suppression 
+    for i in range(1, M-1):
+        for j in range(1, N-1):
+            angle = ang[i, j]
+
+            if (0 <= angle < 22.5) or (157.5 <= angle <= 180):
+                q, r = mag[i, j+1], mag[i, j-1]
+            elif 22.5 <= angle < 67.5:
+                q, r = mag[i+1, j-1], mag[i-1, j+1]
+            elif 67.5 <= angle < 112.5:
+                q, r = mag[i+1, j], mag[i-1, j]
+            else:
+                q, r = mag[i-1, j-1], mag[i+1, j+1]
+
+            if mag[i, j] >= q and mag[i, j] >= r:
+                Z[i, j] = mag[i, j]
+
+    # Double Threshold using + / - values 
+    strong, weak = 255, 75
+    res = np.zeros_like(Z, dtype=np.uint8)
+
+    res[Z >= high_threshold] = strong
+    res[(Z < high_threshold) & (Z >= low_threshold)] = weak
+
+    #Hysteresis 
+    result = res.copy()
+    for i in range(1, M-1):
+        for j in range(1, N-1):
+            if result[i, j] == weak:
+                if strong in result[i-1:i+2, j-1:j+2]:
                     result[i, j] = strong
-    
+                else:
+                    result[i, j] = 0
+
     return result
 
+#MAIN
+cap = cv2.VideoCapture(0)
+mode = None
 
-# ========== MAIN CAMERA APPLICATION ==========
-def main():
-    cap = cv2.VideoCapture(0)
-    
-    if not cap.isOpened():
-        print("Error: Could not open camera")
-        return
-    
-    print("Press 'q' to quit")
-    print("Press '+' to increase high threshold")
-    print("Press '-' to decrease high threshold")
-    
-    low_threshold = 10
-    high_threshold = 150
-    
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        
-        # Convert to grayscale
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
-        # Apply Canny edge detection
-        edges = canny_edge_detection(gray, low_threshold, high_threshold)
-        
-        # Display side by side
-        display_frame = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-        display_edges = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
-        combined = np.hstack((display_frame, display_edges))
-        
-        # Add threshold info
-        text = f"Low: {low_threshold} | High: {high_threshold}"
-        cv2.putText(combined, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        
-        cv2.imshow('Original | Canny Edges', combined)
-        
-        # Keyboard controls
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord('q'):
-            break
-        elif key == ord('+'):
-            high_threshold = min(255, high_threshold + 10)
-            print(f"High threshold: {high_threshold}")
-        elif key == ord('-'):
-            high_threshold = max(low_threshold + 10, high_threshold - 10)
-            print(f"High threshold: {high_threshold}")
-    
-    cap.release()
-    cv2.destroyAllWindows()
+high_threshold = 60
+low_threshold = 30
 
+cv2.namedWindow("Live Camera")
 
-if __name__ == "__main__":
-    main()
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    key = cv2.waitKey(1) & 0xFF
+
+    # ---- Change modes ----
+    if key == ord('s'):
+        mode = 'sobel'
+    elif key == ord('c'):
+        mode = 'canny'
+    elif key == ord('n'):
+        mode = None
+    elif key == ord('q'):
+        break
+
+    #Change Canny Threshold
+    if key == ord('+'):
+        high_threshold = min(255, high_threshold + 10)
+        print(f"High threshold: {high_threshold}")
+
+    elif key == ord('-'):
+        high_threshold = max(low_threshold + 10, high_threshold - 10)
+        print(f"High threshold: {high_threshold}")
+
+    #MODE
+    if mode == 'sobel':
+        output = sobel(frame)
+
+    elif mode == 'canny':
+        output = Canny_edge_detection(frame, low_threshold, high_threshold)
+
+    else:
+        output = frame
+
+    cv2.imshow("Live Camera", output)
+
+cap.release()
+cv2.destroyAllWindows()
